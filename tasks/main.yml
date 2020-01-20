@@ -1,0 +1,193 @@
+---
+
+- name: Look for an existing encrypt token [Get Token]
+  block:
+    - name: Stat configuration file
+      stat:
+        path: "{{ consul.conf_path }}/consul.hcl"
+      register: consul_hcl
+    - name: Run shell cmd to get the token
+      shell: cat '{{ consul.conf_path }}/consul.hcl' | sed -n -e 's/^encrypt = //p' | tr -d '"'
+      register: _encrypt_key_output
+      with_items: "{{ consul_hcl.stat.exists }}"
+      when: consul_hcl.stat.exists
+    - set_fact:
+        _encrypt_key: "{{ item.stdout }}"
+      with_items: "{{ _encrypt_key_output.results }}"
+      when: (_encrypt_key_output.changed) and (not item is skipped)
+  become: true
+  when: (encrypt_key is not defined)
+  delegate_to: "{{ consul.host }}"
+  tags: get_token, configure
+
+- name: Hashicorp Consul [Download Binary]
+  block:
+    - name: "Downloading version {{ consul.version }} for linux_amd64"
+      get_url:
+        url: "https://releases.hashicorp.com/consul/{{ consul.version }}/consul_{{ consul.version }}_linux_amd64.zip"
+        dest: "/tmp/consul_{{ consul.version }}_linux_amd64.zip"
+        checksum: "sha256:https://releases.hashicorp.com/consul/{{ consul.version }}/consul_{{ consul.version }}_SHA256SUMS"
+      register: zipFile
+  tags: download
+
+- name: Hashicorp Consul [Prerequisites]
+  block:
+    - name: Update yum cache
+      yum:
+        update_cache: yes
+      when: ('yum' in ansible_pkg_mgr)
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+      when: ('apt' in ansible_pkg_mgr)
+    - name: Install packages
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - "{{ consul.required_packages }}"
+    - name: Create group
+      group:
+        name: consul
+    - name: Create user
+      user:
+        name: consul
+        group: consul
+        home: "{{ consul.conf_path }}"
+        create_home: false
+        shell: /bin/false
+        comment: consul user
+    - name: Create configuration directory
+      file:
+        path: "{{ consul.conf_path }}"
+        state: directory
+        owner: consul
+        group: consul
+    - name: Create data directory
+      file:
+        path: "{{ consul.config.data_dir }}"
+        state: directory
+        owner: consul
+        group: consul
+  become: true
+  tags: prerequisites
+
+- name: Hashicorp Consul [Install]
+  block:
+    - name: "Extract {{ zipFile.dest }}"
+      unarchive:
+        src: "{{ zipFile.dest }}"
+        dest: "{{ consul.bin_path }}"
+        remote_src: true
+    - name: Symlink binary to /usr/bin
+      file:
+        src: "{{ consul.bin_path }}/consul"
+        dest: "/usr/bin/consul"
+        state: link
+  become: true
+  tags: install
+
+- name: Hashicorp Consul [Configure]
+  block:
+    - name: Generate an encryption key
+      command: consul keygen
+      register: keygen_output
+      no_log: true
+      run_once: true
+      when: (not skip_key_gen | default(false) and _encrypt_key is not defined)
+    - name: Set 'encrypt_key' to generated key
+      set_fact:
+        encrypt_key: "{{ _encrypt_key | default(keygen_output.stdout) }}"
+        no_log: true
+        run_once: true
+    - name: Generate config files
+      template:
+        src: "{{ item }}"
+        dest: "{{ consul.conf_path }}/consul.hcl"
+        mode: 0640
+        owner: consul
+        group: consul
+        force: "{{ overwrite_config | default('no') }}"
+      with_fileglob: "templates/*.hcl.j2"
+      register: config_files
+    - name: "Verify permissions on {{ consul.config.data_dir }}"
+      file:
+        path: "{{ consul.config.data_dir }}"
+        state: directory
+        recurse: yes
+        owner: consul
+        group: consul
+  become: true
+  tags: configure
+
+- name: Hashicorp Consul [Service]
+  block:
+    - name: Enable and reload the service
+      template:
+        src: templates/systemd_service.j2
+        dest: /etc/systemd/system/consul.service
+      when: ansible_service_mgr == "systemd" and (config_files is defined and config_files.changed)
+      notify:
+        - 'enable consul'
+        - 'reload consul'
+    - name: Restart the service
+      service:
+        name: consul
+        state: restarted
+      when: (not skip_restart | default(false))
+  become: true
+  tags: service
+
+- name: Hashicorp Consul [ACLs]
+  block:
+    - name: ACL Bootstrap [return token]
+      command: consul acl bootstrap
+      register: acl_bootstrap_output
+    - name: "Write token to {{ consul.conf_path }}/acl.token"
+      copy:
+        content: "{{ acl_bootstrap_output.stdout }}"
+        dest: "{{ consul.conf_path }}/acl.token"
+        mode: 0640
+        owner: consul
+        group: consul
+  become: true
+  no_log: true
+  run_once: true
+  when: (bootstrap_acl | default(false))
+  delegate_to: "{{ consul.host }}"
+  tags: acl
+
+- name: Hashicorp Consul [CA]
+  block:
+    - name: "Check existing CA files in {{ consul.ca.path }}"
+      stat:
+        path: "{{ consul.ca.path }}/consul-agent-ca.pem"
+      register: existing_ca
+    - name: Create configuration directory
+      file:
+        path: "{{ consul.ca.path }}"
+        state: directory
+        owner: consul
+        group: consul
+    - name: Create certificate authority
+      command: consul tls ca create
+      args:
+        chdir: "{{ consul.ca.path }}"
+      when: not existing_ca.stat.exists
+    - name: Create server certificates
+      command: consul tls cert create -server -days "{{ consul.ca.cert_expiration | default('365') }}" -dc "{{ consul.config.datacenter }}" -domain "{{ consul.config.domain }}" -additional-dnsname "{{ additional_dnsname }}" -additional-ipaddress "{{ additional_ipaddress }}"
+      args:
+        chdir: "{{ consul.ca.path }}"
+      with_items: "{{ consul.servers }}"
+    - name: "Verify permissions on {{ consul.ca.path }}"
+      file:
+        path: "{{ consul.ca.path }}"
+        state: directory
+        recurse: yes
+        owner: consul
+        group: consul
+  become: true
+  run_once: true
+  when: (consul_ca | default(false))
+  delegate_to: "{{ consul.host }}"
+  tags: ca
