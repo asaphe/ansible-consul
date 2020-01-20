@@ -1,0 +1,41 @@
+---
+
+additional_dnsname: "{{ hostvars[item].ansible_fqdn }}"
+additional_ipaddress: "{{ hostvars[item].ansible_default_ipv4.address }}"
+
+consul:
+  host: "{{ play_hosts[0] }}"
+  servers: "{{ play_hosts }}"
+  version: 1.6.2
+  bin_path: /usr/local/bin
+  conf_path: /etc/consul.d
+  required_packages:
+    - unzip
+  config:
+    server: "true"
+    ui: "true"
+    enable_syslog: "true"
+    encrypt: "{{ encrypt_key | default (omit) }}"
+    log_level: "INFO"
+    domain: "consul"
+    datacenter: "dc1"
+    primary_datacenter: "dc1"
+    node_name: "{{ ansible_hostname }}"
+    data_dir: "/opt/consul"
+    encrypt_verify_incoming: "false"
+    encrypt_verify_outgoing: "false"
+    verify_incoming: "false"
+    verify_outgoing: "false"
+    verify_server_hostname: "false"
+    enable_script_checks: "false"
+    disable_remote_exec: "true"
+    bind_addr: "0.0.0.0"
+    client_addr: "0.0.0.0"
+    advertise_addr: "{{ ansible_default_ipv4.address }}"
+    retry_join: "[{% for host in play_hosts %}{{ hostvars[host].ansible_default_ipv4.address | to_json }}{% if not loop.last %},{% endif %}{% endfor %}]"
+    bootstrap_expect: "{{ ansible_play_hosts|length if ansible_play_hosts|length>1 else 0 }}"
+  acl:
+    enabled: "true"
+    enable_token_persistence: "true"
+    default_policy: "allow"
+    down_policy: "extend-cache"

@@ -1,0 +1,77 @@
+{% for key, value in consul.config.items() %}
+{% if ("retry_join" in key) or ("bootstrap_expect" in key) or ("true" in value) or ("false" in value) %}
+{{ key }} = {{ value | lower }}
+{% else %}
+{{ key }} = {{ value | to_json }}
+{% endif %}
+{% endfor %}
+
+{% if ca_files is defined %}
+{% for key, value in ca_files.items() %}
+{{ key }} = {{ value | to_json }}
+{% endfor %}
+{% endif %}
+
+{% if consul.ports is defined %}
+ports {
+{% for key, value in consul.ports.items() %}
+  {{ key }} = {{ value | to_json }}
+{% endfor %}
+}
+{% endif %}
+
+{% if consul.auto_encrypt is defined %}
+auto_encrypt {
+{% for key, value in consul.auto_encrypt.items() %}
+{% if ("true" in value) or ("false" in value) %}
+  {{ key }} = {{ value | lower }}
+{% else %}
+  {{ key }} = {{ value | to_json }}
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
+{% if consul.acl is defined %}
+acl {
+{% for key, value in consul.acl.items() %}
+{% if ("true" in value) or ("false" in value) %}
+  {{ key }} = {{ value | lower }}
+{% else %}
+  {{ key }} = {{ value | to_json }}
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
+{% if consul.addresses is defined %}
+addresses {
+{% for key, value in consul.addresses.items() %}
+  {{ key }} = {{ value | to_json }}
+{% endfor %}
+}
+{% endif %}
+
+{% if consul.performance is defined %}
+performance {
+{% for key, value in consul.performance.items() %}
+{% if ("true" in value) or ("false" in value) %}
+  {{ key }} = {{ value | lower }}
+{% else %}
+  {{ key }} = {{ value | to_json }}
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
+{% if consul.telemetry is defined %}
+telemetry {
+{% for key, value in consul.telemetry.items() %}
+{% if ("true" in value) or ("false" in value) %}
+  {{ key }} = {{ value | lower }}
+{% else %}
+  {{ key }} = {{ value | to_json }}
+{% endif %}
+{% endfor %}
+}
+{% endif %}

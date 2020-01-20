@@ -1,0 +1,28 @@
+---
+
+- block:
+    - name: Enable service
+      systemd:
+        name: consul
+        enabled: yes
+      listen: 'enable consul'
+
+    - name: Start service
+      systemd:
+        name: consul
+        state: started
+      listen: 'start consul'
+
+    - name: Restart service
+      systemd:
+        name: consul
+        state: restarted
+      listen: 'restart consul'
+
+    - name: Reload service
+      systemd:
+        name: consul
+        state: reloaded
+      listen: 'reload consul'
+  become: true
+  when: ansible_service_mgr == "systemd"
