@@ -10,7 +10,7 @@
 {% for key, value in ca_files.items() %}
 {{ key }} = {{ value | to_json }}
 {% endfor %}
-{% endif %}
+{% endif -%}
 
 {% if consul.ports is defined %}
 ports {
@@ -18,7 +18,7 @@ ports {
   {{ key }} = {{ value | to_json }}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
 
 {% if consul.auto_encrypt is defined %}
 auto_encrypt {
@@ -30,7 +30,7 @@ auto_encrypt {
 {% endif %}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
 
 {% if consul.acl is defined %}
 acl {
@@ -42,7 +42,7 @@ acl {
 {% endif %}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
 
 {% if consul.addresses is defined %}
 addresses {
@@ -50,7 +50,7 @@ addresses {
   {{ key }} = {{ value | to_json }}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
 
 {% if consul.performance is defined %}
 performance {
@@ -62,7 +62,7 @@ performance {
 {% endif %}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
 
 {% if consul.telemetry is defined %}
 telemetry {
@@ -74,4 +74,4 @@ telemetry {
 {% endif %}
 {% endfor %}
 }
-{% endif %}
+{% endif -%}
