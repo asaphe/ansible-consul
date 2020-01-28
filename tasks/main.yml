@@ -8,27 +8,37 @@
       register: consul_hcl
     - name: Run shell cmd to get the token
       shell: cat '{{ consul.conf_path }}/consul.hcl' | sed -n -e 's/^encrypt = //p' | tr -d '"'
-      register: _encrypt_key_output
+      register: discovered_token_output
       with_items: "{{ consul_hcl.stat.exists }}"
       when: consul_hcl.stat.exists
     - set_fact:
-        _encrypt_key: "{{ item.stdout }}"
-      with_items: "{{ _encrypt_key_output.results }}"
-      when: (_encrypt_key_output.changed) and (not item is skipped)
+        discovered_token: "{{ item.stdout }}"
+      with_items: "{{ discovered_token_output.results }}"
+      when: (discovered_token_output.changed) and (not item is skipped)
   become: true
   when: (encrypt_key is not defined)
   delegate_to: "{{ consul.host }}"
   tags: get_token, configure
 
-- name: Hashicorp Consul [Download Binary]
+- name: Hashicorp Consul [Download]
   block:
     - name: "Downloading version {{ consul.version }} for linux_amd64"
       get_url:
-        url: "https://releases.hashicorp.com/consul/{{ consul.version }}/consul_{{ consul.version }}_linux_amd64.zip"
-        dest: "/tmp/consul_{{ consul.version }}_linux_amd64.zip"
+        url: https://releases.hashicorp.com/consul/{{ consul.version }}/consul_{{ consul.version }}_{{ arch }}.zip
+        dest: /tmp
         checksum: "sha256:https://releases.hashicorp.com/consul/{{ consul.version }}/consul_{{ consul.version }}_SHA256SUMS"
       register: zipFile
+  when: not copy_binary | default(false)
   tags: download
+
+- name: Hashicorp Consul [Copy]
+  block:
+    - name: Copy binary to remote
+      copy:
+        src: files/consul
+        dest: "{{ consul.bin_path }}"
+  when: copy_binary | default(false)
+  tags: copy
 
 - name: Hashicorp Consul [Prerequisites]
   block:
@@ -79,6 +89,7 @@
         src: "{{ zipFile.dest }}"
         dest: "{{ consul.bin_path }}"
         remote_src: true
+        when: not copy_binary | default(false)
     - name: Symlink binary to /usr/bin
       file:
         src: "{{ consul.bin_path }}/consul"
@@ -87,6 +98,19 @@
   become: true
   tags: install
 
+- name: Hashicorp Consul [Copy Certificates]
+  block:
+    - name: Copy certificate files to remote
+      copy:
+        src: "{{ item }}"
+        dest: /etc/ssl/certs/
+      with_fileglob:
+        - "files/*.crt"
+        - "files/*.pem"
+        - "files/*.key"
+  when: copy_certs | default(false)
+  tags: copy_certs
+
 - name: Hashicorp Consul [Configure]
   block:
     - name: Generate an encryption key
@@ -94,16 +118,16 @@
       register: keygen_output
       no_log: true
       run_once: true
-      when: (not skip_key_gen | default(false) and _encrypt_key is not defined)
+      when: (not skip_key_gen | default(false) and discovered_token is not defined)
     - name: Set 'encrypt_key' to generated key
       set_fact:
-        encrypt_key: "{{ _encrypt_key | default(keygen_output.stdout) }}"
+        encrypt_key: "{{ discovered_token | default(keygen_output.stdout) }}"
         no_log: true
         run_once: true
     - name: Generate config files
       template:
         src: "{{ item }}"
-        dest: "{{ consul.conf_path }}/consul.hcl"
+        dest: "{{ consul.conf_path }}/"
         mode: 0640
         owner: consul
         group: consul
@@ -138,7 +162,7 @@
   become: true
   tags: service
 
-- name: Hashicorp Consul [ACLs]
+- name: Hashicorp Consul [ACL]
   block:
     - name: ACL Bootstrap [return token]
       command: consul acl bootstrap
