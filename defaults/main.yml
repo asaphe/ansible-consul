@@ -6,7 +6,8 @@ additional_ipaddress: "{{ hostvars[item].ansible_default_ipv4.address }}"
 consul:
   host: "{{ play_hosts[0] }}"
   servers: "{{ play_hosts }}"
-  version: 1.6.2
+  version: 1.6.2 # for enterprise add '+ent'
+  arch: linux_amd64
   bin_path: /usr/local/bin
   conf_path: /etc/consul.d
   required_packages:
@@ -14,6 +15,13 @@ consul:
   config:
     server: "true"
     ui: "true"
+    encrypt_verify_incoming: "false"
+    encrypt_verify_outgoing: "false"
+    verify_incoming: "false"
+    verify_outgoing: "false"
+    verify_server_hostname: "false"
+    enable_script_checks: "false"
+    disable_remote_exec: "false"
     enable_syslog: "true"
     encrypt: "{{ encrypt_key | default (omit) }}"
     log_level: "INFO"
@@ -22,13 +30,6 @@ consul:
     primary_datacenter: "dc1"
     node_name: "{{ ansible_hostname }}"
     data_dir: "/opt/consul"
-    encrypt_verify_incoming: "false"
-    encrypt_verify_outgoing: "false"
-    verify_incoming: "false"
-    verify_outgoing: "false"
-    verify_server_hostname: "false"
-    enable_script_checks: "false"
-    disable_remote_exec: "false"
     bind_addr: "0.0.0.0"
     client_addr: "0.0.0.0"
     advertise_addr: "{{ ansible_default_ipv4.address }}"
