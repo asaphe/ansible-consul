@@ -33,6 +33,7 @@ consul:
     bind_addr: "0.0.0.0"
     client_addr: "0.0.0.0"
     advertise_addr: "{{ ansible_default_ipv4.address }}"
+    #advertise_addr: "{{hostvars[inventory_hostname]['ansible_env'].SSH_CONNECTION.split(' ')[2]}}"
     retry_join: "[{% for host in play_hosts %}{{ hostvars[host].ansible_default_ipv4.address | to_json }}{% if not loop.last %},{% endif %}{% endfor %}]"
     bootstrap_expect: "{{ ansible_play_hosts | length if ansible_play_hosts | length > 1 else 0 }}"
   acl:
