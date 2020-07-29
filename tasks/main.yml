@@ -11,7 +11,8 @@
       register: discovered_token_output
       with_items: "{{ consul_hcl.stat.exists }}"
       when: consul_hcl.stat.exists
-    - set_fact:
+    - name: Set 'discovered_token'
+      set_fact:
         discovered_token: "{{ item.stdout }}"
       with_items: "{{ discovered_token_output.results }}"
       when: (discovered_token_output.changed) and (not item is skipped)
@@ -177,7 +178,7 @@
   become: true
   no_log: true
   run_once: true
-  when: (bootstrap_acl | default(false))
+  when: (consul.acl.enabled | default(false))
   delegate_to: "{{ consul.host }}"
   tags: acl
 
